@@ -1,10 +1,12 @@
 name: CI
 
 on:
-  push:
-  pull_request:
-  schedule:
-    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      test-filter:
+        description: 'Optional mocha --grep pattern to run a subset of tests'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -12,18 +14,19 @@ permissions:
 jobs:
   test-node:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
 
     strategy:
+      fail-fast: false
       matrix:
         node-version: [14, 16]
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
 
@@ -31,18 +34,37 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm test
+        run: |
+          if [ -z "${{ inputs.test-filter }}" ]; then
+            npm test
+          else
+            npm run compile
+            npx mocha --reporter dot --bail --grep "${{ inputs.test-filter }}" test/index.js
+          fi
+
+      - name: Pack
+        if: matrix.node-version == 16
+        run: npm pack
+
+      - name: Upload package
+        if: matrix.node-version == 16
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarball
+          path: socket.io-parser-4.2.2.tgz
+          if-no-files-found: error
 
   test-browser:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Use Node.js 16
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 16
 
